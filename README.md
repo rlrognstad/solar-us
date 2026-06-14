@@ -16,8 +16,10 @@ src/solar/
   auth.py      OAuth2: authorize URL, code exchange, refresh, token storage
   client.py    v4 client (Bearer + api key, refresh-on-401), endpoint methods
   ingest.py    API JSON -> tidy DataFrames -> incremental parquet cache
+               (production + consumption, daily + 15-min)
   weather.py   Open-Meteo irradiance adapter (free, no key) + cache
-  analyze.py   rollups, daily profile, weather-normalized model + anomalies
+  analyze.py   rollups, daily profile, weather-normalized model + anomalies,
+               energy balance (self-consumption / self-sufficiency)
   viz.py       Altair (Vega-Lite) charts + self-contained HTML dashboard
   cli.py       solar-authorize / solar-fetch entry points
 ```
@@ -46,11 +48,21 @@ src/solar/
 solar-fetch systems          # find your system_id (put it in .env)
 solar-fetch meters           # check whether consumption CTs are reporting
 solar-fetch daily            # refresh daily cache + print a summary
-solar-fetch intraday 14      # last 14 days of 15-min telemetry
+solar-fetch intraday 14      # last 14 days of 15-min production telemetry
+solar-fetch consumption 14   # daily + last 14 days of 15-min consumption (needs CTs)
 solar-fetch weather          # cache Open-Meteo irradiance for the daily span
 solar-fetch anomalies        # list days underperforming the weather model (default 2σ)
-solar-fetch dashboard        # write dashboard.html (adds weather panels if cached)
+solar-fetch balance          # self-consumption / self-sufficiency from the cache
+solar-fetch dashboard        # write dashboard.html (adds panels for whatever is cached)
 ```
+
+### Energy balance (needs consumption CTs)
+
+`consumption` pulls your household usage; `balance` aligns it with production at
+15-min resolution to report **self-consumption** (share of solar kept on-site) and
+**self-sufficiency** (share of usage covered by solar), plus import/export totals.
+The dashboard gains two panels: daily energy flows (self-use + export above zero,
+grid import below) and the average-day solar-vs-load profile.
 
 ### Weather-normalized performance
 

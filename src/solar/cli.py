@@ -4,9 +4,11 @@
   solar-fetch systems             list systems and their ids
   solar-fetch meters              probe whether consumption CTs are reporting
   solar-fetch daily               refresh the daily cache, print a summary
-  solar-fetch intraday DAYS       pull last DAYS of 15-min telemetry
+  solar-fetch intraday DAYS       pull last DAYS of 15-min production telemetry
+  solar-fetch consumption DAYS    pull daily + last DAYS of 15-min consumption (needs CTs)
   solar-fetch weather             fetch/cache Open-Meteo irradiance for the daily span
   solar-fetch anomalies [Z]       list days underperforming the weather model (default 2σ)
+  solar-fetch balance             self-consumption / self-sufficiency from the cache
   solar-fetch dashboard [OUT]     build the HTML dashboard (default: dashboard.html)
 """
 from __future__ import annotations
@@ -76,6 +78,28 @@ def _probe_meters(client: EnphaseClient, sid: str) -> None:
         print("  consumption CTs: none reporting (endpoint returned no usage data)")
 
 
+def _print_balance(s) -> None:
+    prod = ingest.load_intraday(s)
+    cons = ingest.load_intraday_consumption(s)
+    if prod.empty or cons.empty:
+        raise SystemExit(
+            "Need cached intraday production + consumption. Run "
+            "`solar-fetch intraday N` and `solar-fetch consumption N` first."
+        )
+    bal = analyze.energy_balance(prod, cons)
+    if bal.empty:
+        raise SystemExit("No overlapping production/consumption intervals to balance yet.")
+    b = analyze.balance_summary(bal)
+    print(f"Energy balance over {b['days']} day(s) of overlap:")
+    print(f"  produced       {b['produced_kwh']:8.1f} kWh")
+    print(f"  consumed       {b['consumed_kwh']:8.1f} kWh")
+    print(f"  self-consumed  {b['self_consumed_kwh']:8.1f} kWh")
+    print(f"  exported       {b['exported_kwh']:8.1f} kWh")
+    print(f"  imported       {b['imported_kwh']:8.1f} kWh")
+    print(f"  self-consumption  {b['self_consumption_pct']:5.1f}%  (solar kept on-site)")
+    print(f"  self-sufficiency  {b['self_sufficiency_pct']:5.1f}%  (usage covered by solar)")
+
+
 def _print_anomalies(s, args: list[str]) -> None:
     daily = ingest.load_daily(s)
     wx = weather.load_weather(s)
@@ -112,16 +136,21 @@ def fetch() -> None:
             raise SystemExit("No cached daily data yet. Run `solar-fetch daily` first.")
         intraday = ingest.load_intraday(s)
         wx = weather.load_weather(s)
+        cons = ingest.load_intraday_consumption(s)
         chart = viz.dashboard(
             daily,
             intraday if not intraday.empty else None,
             wx if not wx.empty else None,
+            cons if not cons.empty else None,
         )
         path = viz.save(chart, out)
         print(f"Wrote {path.resolve()}")
         return
     if cmd == "anomalies":
         _print_anomalies(s, args)
+        return
+    if cmd == "balance":
+        _print_balance(s)
         return
 
     client = EnphaseClient(s)
@@ -157,5 +186,12 @@ def fetch() -> None:
             f"{len(w)} weather days cached "
             f"({w['date'].min().date()} -> {w['date'].max().date()}) for ({lat:.4f}, {lon:.4f})"
         )
+    elif cmd == "consumption":
+        days = int(args[1]) if len(args) > 1 else 14
+        end = dt.date.today()
+        d = ingest.daily_consumption(client, sid)
+        i = ingest.intraday_consumption(client, sid, end - dt.timedelta(days=days), end)
+        print(f"{len(d)} daily-consumption days cached ({d['date'].min().date()} -> {d['date'].max().date()})")
+        print(f"{len(i)} consumption intervals cached through {i['ts'].max() if not i.empty else 'n/a'}")
     else:
         raise SystemExit(__doc__)

@@ -140,10 +140,66 @@ def weather_residual(scored: pd.DataFrame) -> alt.LayerChart:
     )
 
 
+def energy_flows_daily(daily_bal: pd.DataFrame) -> alt.Chart:
+    """Daily energy flows: self-consumed + exported above zero (= production),
+    grid import drawn below zero."""
+    long = pd.DataFrame(
+        {
+            "date": pd.concat([daily_bal["date"]] * 3, ignore_index=True),
+            "flow": (
+                ["self-consumed"] * len(daily_bal)
+                + ["exported"] * len(daily_bal)
+                + ["imported"] * len(daily_bal)
+            ),
+            "kwh": pd.concat(
+                [daily_bal["self_kwh"], daily_bal["export_kwh"], -daily_bal["import_kwh"]],
+                ignore_index=True,
+            ),
+        }
+    )
+    color = alt.Color(
+        "flow:N",
+        title=None,
+        scale=alt.Scale(
+            domain=["self-consumed", "exported", "imported"],
+            range=["goldenrod", "steelblue", "indianred"],
+        ),
+    )
+    return (
+        alt.Chart(long)
+        .mark_bar()
+        .encode(
+            x=alt.X("date:T", title=None),
+            y=alt.Y("kwh:Q", title="kWh  (− = grid import)", stack="zero"),
+            color=color,
+            tooltip=["date:T", "flow:N", "kwh:Q"],
+        )
+        .properties(
+            width=CELL_WIDTH, height=CELL_HEIGHT, title="Daily energy flows (solar use vs grid import)"
+        )
+    )
+
+
+def balance_profile_chart(profile: pd.DataFrame) -> alt.LayerChart:
+    """Average day: solar production (area) vs household load (line). The gap is
+    import (load above solar) or export (solar above load)."""
+    base = alt.Chart(profile).encode(
+        x=alt.X("hour:Q", title="hour of day", scale=alt.Scale(domain=[0, 24]))
+    )
+    solar = base.mark_area(color="goldenrod", opacity=0.5).encode(
+        y=alt.Y("solar_kwh:Q", title="avg kWh / 15-min")
+    )
+    load = base.mark_line(color="firebrick", strokeWidth=2).encode(y="load_kwh:Q")
+    return (solar + load).properties(
+        width=CELL_WIDTH, height=CELL_HEIGHT, title="Average day: solar (area) vs load (line)"
+    )
+
+
 def dashboard(
     daily: pd.DataFrame,
     intraday: pd.DataFrame | None = None,
     weather: pd.DataFrame | None = None,
+    cons_intraday: pd.DataFrame | None = None,
 ) -> alt.ConcatChart:
     charts = [calendar_heatmap(daily), monthly_bars(daily), rolling_line(daily)]
     if intraday is not None and not intraday.empty:
@@ -154,6 +210,16 @@ def dashboard(
             charts += [weather_fit(scored), weather_residual(scored)]
         except ValueError:
             pass  # not enough overlapping days yet — skip the weather panels
+    if (
+        intraday is not None and not intraday.empty
+        and cons_intraday is not None and not cons_intraday.empty
+    ):
+        balance = analyze.energy_balance(intraday, cons_intraday)
+        if not balance.empty:
+            charts += [
+                energy_flows_daily(analyze.daily_balance(balance)),
+                balance_profile_chart(analyze.balance_profile(balance)),
+            ]
     # Two-column grid.
     return alt.concat(*charts, columns=2).resolve_scale(color="independent").properties(
         title="Home solar production"
