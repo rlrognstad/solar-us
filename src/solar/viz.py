@@ -69,31 +69,48 @@ def rolling_line(daily: pd.DataFrame, window: int = 30) -> alt.Chart:
     )
 
 
-def daily_profile(intraday: pd.DataFrame) -> alt.LayerChart:
+def _interval_profile(
+    intraday: pd.DataFrame, title: str, point_color: str, line_color: str
+) -> alt.LayerChart:
+    """Time-of-day profile: every 15-min interval as faint points, with the mean
+    profile drawn boldly on top. Works for any ts/kwh frame (production or load)."""
     prof = analyze.average_daily_profile(intraday)
-
     raw = intraday.copy()
     raw["hour"] = (raw["ts"].dt.hour * 60 + raw["ts"].dt.minute) / 60.0
 
     x = alt.X("hour:Q", title="hour of day", scale=alt.Scale(domain=[0, 24]))
     y = alt.Y("kwh:Q", title="kWh / 15-min")
 
-    # Every interval across all days as faint points...
     points = (
         alt.Chart(raw)
-        .mark_circle(size=16, opacity=0.4, color="steelblue")
+        .mark_circle(size=16, opacity=0.4, color=point_color)
         .encode(x=x, y=y, tooltip=[alt.Tooltip("ts:T", title="time"), "kwh:Q"])
     )
-    # ...with the mean profile drawn boldly on top.
     average = (
         alt.Chart(prof)
-        .mark_line(color="goldenrod", strokeWidth=3)
+        .mark_line(color=line_color, strokeWidth=3)
         .encode(x=x, y=y, tooltip=["hour:Q", "kwh:Q"])
     )
-    return (points + average).properties(
-        width=CELL_WIDTH,
-        height=CELL_HEIGHT,
-        title="Daily production profile — actual (points) vs average (line)",
+    return (points + average).properties(width=CELL_WIDTH, height=CELL_HEIGHT, title=title)
+
+
+def daily_profile(intraday: pd.DataFrame) -> alt.LayerChart:
+    """Production: actual (points) vs average (line) by time of day."""
+    return _interval_profile(
+        intraday,
+        "Daily production profile — actual (points) vs average (line)",
+        point_color="steelblue",
+        line_color="goldenrod",
+    )
+
+
+def load_profile(intraday: pd.DataFrame) -> alt.LayerChart:
+    """Household load: actual (points) vs average (line) by time of day."""
+    return _interval_profile(
+        intraday,
+        "Daily load profile — actual (points) vs average (line)",
+        point_color="indianred",
+        line_color="firebrick",
     )
 
 
@@ -210,6 +227,8 @@ def dashboard(
     charts = [calendar_heatmap(daily), monthly_bars(daily), rolling_line(daily)]
     if intraday is not None and not intraday.empty:
         charts.append(daily_profile(intraday))
+    if cons_intraday is not None and not cons_intraday.empty:
+        charts.append(load_profile(cons_intraday))
     if weather is not None and not weather.empty:
         try:
             scored, _ = analyze.weather_model(daily, weather)
