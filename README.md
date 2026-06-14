@@ -7,6 +7,9 @@ calls only on days you don't already have. The daily series comes back in a sing
 `energy_lifetime` call, which keeps you comfortably inside the free **Watt** plan
 (1,000 calls/month).
 
+For day-to-day operation — setup, routine commands, cron automation, and
+troubleshooting — see the [runbook](RUNBOOK.md).
+
 ```
 src/solar/
   config.py    settings + paths (from .env)
