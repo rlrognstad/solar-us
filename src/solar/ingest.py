@@ -16,6 +16,18 @@ DAILY_PARQUET = "daily_production.parquet"
 INTRADAY_PARQUET = "intraday_production.parquet"
 
 
+def load_daily(settings) -> pd.DataFrame:
+    """Read the cached daily frame without hitting the API (empty if none yet)."""
+    path = settings.cache_dir / DAILY_PARQUET
+    return pd.read_parquet(path) if path.exists() else pd.DataFrame()
+
+
+def load_intraday(settings) -> pd.DataFrame:
+    """Read the cached intraday frame without hitting the API (empty if none yet)."""
+    path = settings.cache_dir / INTRADAY_PARQUET
+    return pd.read_parquet(path) if path.exists() else pd.DataFrame()
+
+
 def _energy_lifetime_to_frame(payload: dict) -> pd.DataFrame:
     start = pd.to_datetime(payload["start_date"])
     values = payload.get("production", [])

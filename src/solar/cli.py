@@ -40,6 +40,19 @@ def fetch() -> None:
     args = sys.argv[1:]
     cmd = args[0] if args else "daily"
     s = load_settings()
+
+    # dashboard renders from the local cache only — no API calls, no client.
+    # Re-run `solar-fetch daily`/`intraday` when you want fresh data.
+    if cmd == "dashboard":
+        out = args[1] if len(args) > 1 else "dashboard.html"
+        daily = ingest.load_daily(s)
+        if daily.empty:
+            raise SystemExit("No cached daily data yet. Run `solar-fetch daily` first.")
+        intraday = ingest.load_intraday(s)
+        path = viz.save(viz.dashboard(daily, intraday if not intraday.empty else None), out)
+        print(f"Wrote {path.resolve()}")
+        return
+
     client = EnphaseClient(s)
 
     if cmd == "systems":
@@ -57,15 +70,5 @@ def fetch() -> None:
         end = dt.date.today()
         df = ingest.intraday_production(client, sid, end - dt.timedelta(days=days), end)
         print(f"{len(df)} intervals cached through {df['ts'].max() if not df.empty else 'n/a'}")
-    elif cmd == "dashboard":
-        out = args[1] if len(args) > 1 else "dashboard.html"
-        daily = ingest.daily_production(client, sid)
-        intraday_path = s.cache_dir / ingest.INTRADAY_PARQUET
-        intraday = None
-        if intraday_path.exists():
-            import pandas as pd
-            intraday = pd.read_parquet(intraday_path)
-        path = viz.save(viz.dashboard(daily, intraday), out)
-        print(f"Wrote {path.resolve()}")
     else:
         raise SystemExit(__doc__)

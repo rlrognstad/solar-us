@@ -63,6 +63,10 @@ uv run solar-fetch dashboard        # build dashboard.html (pass a path to overr
 history), then `dashboard` to regenerate the HTML. The parquet cache is the source of
 truth, so repeat runs only spend calls on days not already cached.
 
+`dashboard` makes **no API calls** — it renders entirely from the cache, so you can
+rebuild it as often as you like (e.g. while tuning charts) without touching quota.
+Run `daily`/`intraday` only when you want fresher data.
+
 **Data locations** (under `SOLAR_DATA_DIR`, default `~/.local/share/solar`):
 - `tokens.json` — OAuth tokens
 - `cache/daily_production.parquet` — daily series
