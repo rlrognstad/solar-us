@@ -6,12 +6,19 @@ once and retry.
 """
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import requests
 
 from . import auth
 from .config import API_BASE, Settings
+
+# A 429 with a Retry-After header is a transient per-minute rate limit: wait and
+# retry. A 429 without one is the plan's monthly quota — retrying won't help, so
+# we fail fast with a clear message instead of burning the wait.
+MAX_RATE_LIMIT_RETRIES = 3
+MAX_RETRY_AFTER_SECONDS = 120
 
 
 class EnphaseError(RuntimeError):
@@ -26,19 +33,38 @@ class EnphaseClient:
             raise EnphaseError("No tokens found. Run `solar-authorize` first.")
         self._session = requests.Session()
 
-    # ---- core request with one-shot refresh-on-401 -------------------------
+    # ---- core request: refresh-on-401, backoff-on-429 ----------------------
     def _get(self, path: str, **params: Any) -> dict:
         params["key"] = self.s.api_key
         url = f"{API_BASE}{path}"
-        headers = {"Authorization": f"Bearer {self.tokens.access_token}"}
-        r = self._session.get(url, params=params, headers=headers, timeout=30)
-        if r.status_code == 401:
-            self.tokens = auth.refresh(self.s, self.tokens)
+        refreshed = False
+        for _ in range(MAX_RATE_LIMIT_RETRIES + 1):
             headers = {"Authorization": f"Bearer {self.tokens.access_token}"}
             r = self._session.get(url, params=params, headers=headers, timeout=30)
-        if not r.ok:
-            raise EnphaseError(f"{r.status_code} {path}: {r.text[:300]}")
-        return r.json()
+
+            if r.status_code == 401 and not refreshed:
+                self.tokens = auth.refresh(self.s, self.tokens)
+                refreshed = True
+                continue
+
+            if r.status_code == 429:
+                retry_after = r.headers.get("Retry-After")
+                if retry_after is None:
+                    raise EnphaseError(
+                        f"429 {path}: Enphase plan quota exhausted (free Watt plan is "
+                        "1,000 calls/month). Wait for the monthly reset, fetch fewer "
+                        f"days, or upgrade the plan. Server said: {r.text[:200]}"
+                    )
+                time.sleep(min(float(retry_after), MAX_RETRY_AFTER_SECONDS))
+                continue
+
+            if not r.ok:
+                raise EnphaseError(f"{r.status_code} {path}: {r.text[:300]}")
+            return r.json()
+
+        raise EnphaseError(
+            f"429 {path}: still rate-limited after {MAX_RATE_LIMIT_RETRIES} retries."
+        )
 
     # ---- endpoints ---------------------------------------------------------
     def systems(self) -> dict:

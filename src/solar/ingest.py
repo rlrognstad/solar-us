@@ -10,7 +10,7 @@ import datetime as dt
 
 import pandas as pd
 
-from .client import EnphaseClient
+from .client import EnphaseClient, EnphaseError
 
 DAILY_PARQUET = "daily_production.parquet"
 INTRADAY_PARQUET = "intraday_production.parquet"
@@ -68,12 +68,22 @@ def intraday_production(
 
     frames = [cached] if not cached.empty else []
     window = start
-    while window <= end:
-        start_at = int(dt.datetime.combine(window, dt.time.min).timestamp())
-        frames.append(_telemetry_to_frame(client.production_meter(system_id, start_at=start_at)))
-        window += dt.timedelta(days=7)
+    try:
+        while window <= end:
+            start_at = int(dt.datetime.combine(window, dt.time.min).timestamp())
+            frames.append(_telemetry_to_frame(client.production_meter(system_id, start_at=start_at)))
+            window += dt.timedelta(days=7)
+    except EnphaseError:
+        # Persist the chunks we already paid for before surfacing the failure,
+        # so a mid-fetch rate limit doesn't waste successful calls.
+        _merge_and_cache(frames, path)
+        raise
 
-    df = pd.concat(frames, ignore_index=True)
+    return _merge_and_cache(frames, path)
+
+
+def _merge_and_cache(frames: list[pd.DataFrame], path) -> pd.DataFrame:
+    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     if not df.empty:
         df = df.drop_duplicates("ts").sort_values("ts").reset_index(drop=True)
         df.to_parquet(path, index=False)

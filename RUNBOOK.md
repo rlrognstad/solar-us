@@ -93,12 +93,16 @@ is one call per ~7-day chunk. A nightly `daily` + occasional `intraday` is well 
 | `Set ENPHASE_SYSTEM_ID in .env ...` | You own >1 system | `uv run solar-fetch systems`, set `ENPHASE_SYSTEM_ID` |
 | `Unable to find a usable engine ... pyarrow` | parquet engine missing | already fixed (pyarrow is a dep); re-run `uv sync` |
 | `EnphaseError: 401 ...` persists | Refresh token expired/revoked | Re-run `uv run solar-authorize` to get fresh tokens |
-| `EnphaseError: 409 / 429 ...` | Rate / quota limit hit | Wait; you've used the monthly call budget — avoid re-fetching |
+| `EnphaseError: 429 ... plan quota exhausted` | Monthly call budget used up (Watt = 1,000/mo) | Wait for the monthly reset, fetch fewer days, or upgrade the plan |
 | `uv: command not found` | uv not on PATH | `export PATH="$HOME/.local/bin:$PATH"` |
 
 Notes:
 - The client refreshes the access token automatically on a single 401 and retries.
   A *repeated* 401 means the refresh token itself is dead → re-authorize.
+- A 429 *with* a `Retry-After` header (transient per-minute rate limit) is backed
+  off and retried automatically; a 429 *without* one is treated as the monthly
+  quota and fails fast. `intraday` persists the chunks it already fetched before a
+  mid-run 429, so those calls aren't wasted — re-run later to fetch the rest.
 - Token TTLs and endpoint details are set by Enphase and have shifted over time;
   verify against https://developer-v4.enphase.com/docs if something misbehaves.
 
