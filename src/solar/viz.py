@@ -58,7 +58,9 @@ def monthly_bars(daily: pd.DataFrame) -> alt.Chart:
 def rolling_line(daily: pd.DataFrame, window: int = 30) -> alt.Chart:
     r = analyze.rolling(daily, window)
     base = alt.Chart(r).encode(x=alt.X("date:T", title=None))
-    pts = base.mark_circle(size=8, opacity=0.25).encode(y=alt.Y("kwh:Q", title="kWh/day"))
+    pts = base.mark_circle(size=18, opacity=0.55, color="steelblue").encode(
+        y=alt.Y("kwh:Q", title="kWh/day")
+    )
     line = base.mark_line(color="firebrick").encode(y=f"kwh_{window}d_avg:Q")
     return (pts + line).properties(
         width=CELL_WIDTH, height=CELL_HEIGHT, title=f"Daily kWh with {window}-day average"
@@ -77,7 +79,7 @@ def daily_profile(intraday: pd.DataFrame) -> alt.LayerChart:
     # Every interval across all days as faint points...
     points = (
         alt.Chart(raw)
-        .mark_circle(size=12, opacity=0.15, color="steelblue")
+        .mark_circle(size=16, opacity=0.4, color="steelblue")
         .encode(x=x, y=y, tooltip=[alt.Tooltip("ts:T", title="time"), "kwh:Q"])
     )
     # ...with the mean profile drawn boldly on top.
