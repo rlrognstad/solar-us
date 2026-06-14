@@ -118,6 +118,15 @@ class EnphaseClient:
             granularity=granularity,
         )
 
+    def consumption_meter(self, system_id: str, start_at: int, granularity: str = "day") -> dict:
+        """15-min consumption-meter telemetry (needs consumption CTs). `start_at` is a
+        unix timestamp; max 7 days per request — same shape as production_meter."""
+        return self._get(
+            f"/systems/{system_id}/telemetry/consumption_meter",
+            start_at=start_at,
+            granularity=granularity,
+        )
+
     def consumption_lifetime(
         self, system_id: str, start_date: str | None = None, end_date: str | None = None
     ) -> dict:
