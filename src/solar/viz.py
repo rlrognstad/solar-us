@@ -57,7 +57,9 @@ def monthly_bars(daily: pd.DataFrame) -> alt.Chart:
 
 def rolling_line(daily: pd.DataFrame, window: int = 30) -> alt.Chart:
     r = analyze.rolling(daily, window)
-    base = alt.Chart(r).encode(x=alt.X("date:T", title=None))
+    base = alt.Chart(r).encode(
+        x=alt.X("date:T", title=None, axis=alt.Axis(format="%b %d", tickCount="month"))
+    )
     pts = base.mark_circle(size=18, opacity=0.55, color="steelblue").encode(
         y=alt.Y("kwh:Q", title="kWh/day")
     )
@@ -126,7 +128,7 @@ def weather_residual(scored: pd.DataFrame) -> alt.LayerChart:
         alt.Chart(scored)
         .mark_bar()
         .encode(
-            x=alt.X("date:T", title=None),
+            x=alt.X("date:T", title=None, axis=alt.Axis(format="%b %d", tickCount="month")),
             y=alt.Y("residual_kwh:Q", title="kWh vs expected"),
             color=alt.condition(
                 alt.datum.residual_kwh < 0, alt.value("indianred"), alt.value("seagreen")
