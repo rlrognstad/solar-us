@@ -41,9 +41,15 @@ def monthly_bars(daily: pd.DataFrame) -> alt.Chart:
         alt.Chart(m)
         .mark_bar()
         .encode(
-            x=alt.X("period:T", title="month"),
+            # Ordinal month bands give full-width bars and one tick per month,
+            # instead of thin slivers on a continuous time axis.
+            x=alt.X(
+                "yearmonth(period):O",
+                title="month",
+                axis=alt.Axis(format="%b %Y", labelAngle=-45),
+            ),
             y=alt.Y("kwh_total:Q", title="kWh"),
-            tooltip=["period:T", "kwh_total:Q"],
+            tooltip=[alt.Tooltip("yearmonth(period):T", title="month"), "kwh_total:Q"],
         )
         .properties(width=CELL_WIDTH, height=CELL_HEIGHT, title="Monthly production")
     )
@@ -59,17 +65,31 @@ def rolling_line(daily: pd.DataFrame, window: int = 30) -> alt.Chart:
     )
 
 
-def daily_profile(intraday: pd.DataFrame) -> alt.Chart:
+def daily_profile(intraday: pd.DataFrame) -> alt.LayerChart:
     prof = analyze.average_daily_profile(intraday)
-    return (
+
+    raw = intraday.copy()
+    raw["hour"] = (raw["ts"].dt.hour * 60 + raw["ts"].dt.minute) / 60.0
+
+    x = alt.X("hour:Q", title="hour of day", scale=alt.Scale(domain=[0, 24]))
+    y = alt.Y("kwh:Q", title="kWh / 15-min")
+
+    # Every interval across all days as faint points...
+    points = (
+        alt.Chart(raw)
+        .mark_circle(size=12, opacity=0.15, color="steelblue")
+        .encode(x=x, y=y, tooltip=[alt.Tooltip("ts:T", title="time"), "kwh:Q"])
+    )
+    # ...with the mean profile drawn boldly on top.
+    average = (
         alt.Chart(prof)
-        .mark_area(opacity=0.6, color="goldenrod")
-        .encode(
-            x=alt.X("hour:Q", title="hour of day", scale=alt.Scale(domain=[0, 24])),
-            y=alt.Y("kwh:Q", title="avg kWh / 15-min"),
-            tooltip=["hour:Q", "kwh:Q"],
-        )
-        .properties(width=CELL_WIDTH, height=CELL_HEIGHT, title="Average daily production profile")
+        .mark_line(color="goldenrod", strokeWidth=3)
+        .encode(x=x, y=y, tooltip=["hour:Q", "kwh:Q"])
+    )
+    return (points + average).properties(
+        width=CELL_WIDTH,
+        height=CELL_HEIGHT,
+        title="Daily production profile — actual (points) vs average (line)",
     )
 
 
