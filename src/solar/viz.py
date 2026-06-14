@@ -169,7 +169,11 @@ def energy_flows_daily(daily_bal: pd.DataFrame) -> alt.Chart:
         alt.Chart(long)
         .mark_bar()
         .encode(
-            x=alt.X("date:T", title=None),
+            x=alt.X(
+                "monthdate(date):O",
+                title=None,
+                axis=alt.Axis(format="%b %d", labelAngle=-45),
+            ),
             y=alt.Y("kwh:Q", title="kWh  (− = grid import)", stack="zero"),
             color=color,
             tooltip=["date:T", "flow:N", "kwh:Q"],
