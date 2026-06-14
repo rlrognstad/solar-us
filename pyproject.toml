@@ -9,6 +9,7 @@ dependencies = [
     "altair>=5.3",
     "python-dotenv>=1.0",
     "duckdb>=1.0",        # optional; used for fast local rollups over the parquet cache
+    "pyarrow>=16",
 ]
 
 [project.scripts]
