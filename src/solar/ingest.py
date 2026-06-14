@@ -48,10 +48,23 @@ def daily_production(client: EnphaseClient, system_id: str, refresh_tail_days: i
     return df
 
 
+# Different v4 telemetry endpoints name the per-interval energy field differently:
+# production_meter uses `wh_del`, the microinverter feed uses `enwh`. Check both so
+# the same frame builder works regardless of source.
+_ENERGY_KEYS = ("wh_del", "enwh", "wh")
+
+
+def _interval_wh(itv: dict) -> float | None:
+    for key in _ENERGY_KEYS:
+        if itv.get(key) is not None:
+            return itv[key]
+    return None
+
+
 def _telemetry_to_frame(payload: dict) -> pd.DataFrame:
     rows = []
     for itv in payload.get("intervals", []):
-        rows.append({"ts": dt.datetime.fromtimestamp(itv["end_at"]), "wh": itv.get("enwh")})
+        rows.append({"ts": dt.datetime.fromtimestamp(itv["end_at"]), "wh": _interval_wh(itv)})
     df = pd.DataFrame(rows)
     if not df.empty:
         df["kwh"] = df["wh"] / 1000.0
@@ -85,6 +98,8 @@ def intraday_production(
 def _merge_and_cache(frames: list[pd.DataFrame], path) -> pd.DataFrame:
     df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     if not df.empty:
-        df = df.drop_duplicates("ts").sort_values("ts").reset_index(drop=True)
+        # cached frame is first, freshly-fetched chunks follow: keep="last" lets a
+        # re-fetch overwrite stale rows (e.g. earlier nulls) for the same interval.
+        df = df.drop_duplicates("ts", keep="last").sort_values("ts").reset_index(drop=True)
         df.to_parquet(path, index=False)
     return df
