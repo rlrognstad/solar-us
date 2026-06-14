@@ -22,6 +22,8 @@ class Settings:
     redirect_uri: str
     system_id: str | None
     data_dir: Path
+    latitude: float | None = None
+    longitude: float | None = None
 
     @property
     def token_path(self) -> Path:
@@ -55,4 +57,11 @@ def load_settings() -> Settings:
         ),
         system_id=os.environ.get("ENPHASE_SYSTEM_ID") or None,
         data_dir=data_dir,
+        latitude=_opt_float("SOLAR_LAT"),
+        longitude=_opt_float("SOLAR_LON"),
     )
+
+
+def _opt_float(name: str) -> float | None:
+    val = os.environ.get(name)
+    return float(val) if val else None

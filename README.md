@@ -16,7 +16,8 @@ src/solar/
   auth.py      OAuth2: authorize URL, code exchange, refresh, token storage
   client.py    v4 client (Bearer + api key, refresh-on-401), endpoint methods
   ingest.py    API JSON -> tidy DataFrames -> incremental parquet cache
-  analyze.py   rollups, capacity factor, best/worst days, daily profile
+  weather.py   Open-Meteo irradiance adapter (free, no key) + cache
+  analyze.py   rollups, daily profile, weather-normalized model + anomalies
   viz.py       Altair (Vega-Lite) charts + self-contained HTML dashboard
   cli.py       solar-authorize / solar-fetch entry points
 ```
@@ -45,8 +46,19 @@ src/solar/
 solar-fetch systems          # find your system_id (put it in .env)
 solar-fetch daily            # refresh daily cache + print a summary
 solar-fetch intraday 14      # last 14 days of 15-min telemetry
-solar-fetch dashboard        # write dashboard.html
+solar-fetch weather          # cache Open-Meteo irradiance for the daily span
+solar-fetch anomalies        # list days underperforming the weather model (default 2σ)
+solar-fetch dashboard        # write dashboard.html (adds weather panels if cached)
 ```
+
+### Weather-normalized performance
+
+`weather` joins free [Open-Meteo](https://open-meteo.com) irradiance (GHI) and
+temperature to your daily production, and `anomalies` regresses production on the
+weather so a residual *below* what irradiance predicts flags real underperformance
+(soiling, snow, new shading, a fault) rather than just a cloudy day. The dashboard
+gains two panels: actual-vs-expected and the daily residual. Set `SOLAR_LAT`/
+`SOLAR_LON` in `.env` if Enphase doesn't expose your coordinates.
 
 Or drive it from a notebook / marimo:
 

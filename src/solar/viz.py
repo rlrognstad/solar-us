@@ -95,11 +95,66 @@ def daily_profile(intraday: pd.DataFrame) -> alt.LayerChart:
     )
 
 
-def dashboard(daily: pd.DataFrame, intraday: pd.DataFrame | None = None) -> alt.ConcatChart:
+def weather_fit(scored: pd.DataFrame) -> alt.LayerChart:
+    """Actual vs weather-expected daily kWh, with a 1:1 reference line. Points below
+    the line produced less than the weather predicted."""
+    lim = float(max(scored["kwh"].max(), scored["expected_kwh"].max())) * 1.05
+    ref = alt.Chart(pd.DataFrame({"v": [0, lim]})).mark_line(
+        color="gray", strokeDash=[4, 4]
+    ).encode(x="v:Q", y="v:Q")
+    pts = (
+        alt.Chart(scored)
+        .mark_circle(size=40, opacity=0.6)
+        .encode(
+            x=alt.X("expected_kwh:Q", title="weather-expected kWh", scale=alt.Scale(domain=[0, lim])),
+            y=alt.Y("kwh:Q", title="actual kWh", scale=alt.Scale(domain=[0, lim])),
+            color=alt.Color(
+                "residual_kwh:Q", title="residual",
+                scale=alt.Scale(scheme="redblue", domainMid=0),
+            ),
+            tooltip=["date:T", "kwh:Q", "expected_kwh:Q", "residual_pct:Q"],
+        )
+    )
+    return (ref + pts).properties(
+        width=CELL_WIDTH, height=CELL_HEIGHT, title="Actual vs weather-expected"
+    )
+
+
+def weather_residual(scored: pd.DataFrame) -> alt.LayerChart:
+    """Daily residual (actual - expected) over time; red bars are underperformance."""
+    bars = (
+        alt.Chart(scored)
+        .mark_bar()
+        .encode(
+            x=alt.X("date:T", title=None),
+            y=alt.Y("residual_kwh:Q", title="kWh vs expected"),
+            color=alt.condition(
+                alt.datum.residual_kwh < 0, alt.value("indianred"), alt.value("seagreen")
+            ),
+            tooltip=["date:T", "kwh:Q", "expected_kwh:Q", "residual_kwh:Q", "residual_pct:Q"],
+        )
+    )
+    zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="black").encode(y="y:Q")
+    return (bars + zero).properties(
+        width=CELL_WIDTH, height=CELL_HEIGHT, title="Daily production residual vs weather"
+    )
+
+
+def dashboard(
+    daily: pd.DataFrame,
+    intraday: pd.DataFrame | None = None,
+    weather: pd.DataFrame | None = None,
+) -> alt.ConcatChart:
     charts = [calendar_heatmap(daily), monthly_bars(daily), rolling_line(daily)]
     if intraday is not None and not intraday.empty:
         charts.append(daily_profile(intraday))
-    # Two-column grid: with all four charts this lays out as a 2x2 grid.
+    if weather is not None and not weather.empty:
+        try:
+            scored, _ = analyze.weather_model(daily, weather)
+            charts += [weather_fit(scored), weather_residual(scored)]
+        except ValueError:
+            pass  # not enough overlapping days yet — skip the weather panels
+    # Two-column grid.
     return alt.concat(*charts, columns=2).resolve_scale(color="independent").properties(
         title="Home solar production"
     )

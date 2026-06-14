@@ -25,6 +25,17 @@ class EnphaseError(RuntimeError):
     pass
 
 
+def _extract_latlon(rec: dict) -> tuple[float, float] | None:
+    """Pull coordinates out of a system record, tolerating the various key names
+    (latitude/longitude, lat/lon/lng) and a nested `location` object."""
+    for obj in (rec, rec.get("location", {}) if isinstance(rec.get("location"), dict) else {}):
+        lat = obj.get("latitude", obj.get("lat"))
+        lon = obj.get("longitude", obj.get("lon", obj.get("lng")))
+        if lat is not None and lon is not None:
+            return float(lat), float(lon)
+    return None
+
+
 class EnphaseClient:
     def __init__(self, settings: Settings):
         self.s = settings
@@ -70,6 +81,18 @@ class EnphaseClient:
     def systems(self) -> dict:
         """List systems visible to the authorized user."""
         return self._get("/systems")
+
+    def system_location(self, system_id: str) -> tuple[float, float] | None:
+        """Best-effort (lat, lon) from the Enphase system record, or None if the
+        plan/response doesn't expose coordinates (then set SOLAR_LAT/SOLAR_LON)."""
+        try:
+            records = self.systems().get("systems", [])
+        except EnphaseError:
+            return None
+        for rec in records:
+            if str(rec.get("system_id")) == str(system_id):
+                return _extract_latlon(rec)
+        return None
 
     def summary(self, system_id: str) -> dict:
         """Current/today summary: energy_today, energy_lifetime, system_size, status."""

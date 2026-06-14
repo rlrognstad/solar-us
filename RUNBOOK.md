@@ -56,8 +56,15 @@ uv run solar-fetch systems    # copy the system_id into ENPHASE_SYSTEM_ID
 ```bash
 uv run solar-fetch daily            # refresh daily cache, print lifetime + last-30d kWh
 uv run solar-fetch intraday 14      # last 14 days of 15-min telemetry (default 7)
+uv run solar-fetch weather          # cache Open-Meteo irradiance for the daily span
+uv run solar-fetch anomalies        # list days >=2σ below the weather model (pass a Z to override)
 uv run solar-fetch dashboard        # build dashboard.html (pass a path to override)
 ```
+
+`weather`/`anomalies` use the free Open-Meteo API (no key, **does not** count against
+the Enphase quota). `anomalies` and `dashboard` are offline — they read the cache and
+make no network calls beyond the one-time `weather` fetch. Location comes from Enphase
+when available, else `SOLAR_LAT`/`SOLAR_LON` in `.env`.
 
 **Typical refresh:** run `daily` (one API call — `energy_lifetime` returns the full
 history), then `dashboard` to regenerate the HTML. The parquet cache is the source of
@@ -71,6 +78,7 @@ Run `daily`/`intraday` only when you want fresher data.
 - `tokens.json` — OAuth tokens
 - `cache/daily_production.parquet` — daily series
 - `cache/intraday_production.parquet` — 15-min telemetry
+- `cache/weather_daily.parquet` — Open-Meteo daily GHI + temperature
 
 ---
 
