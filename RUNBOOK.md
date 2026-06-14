@@ -54,6 +54,7 @@ uv run solar-fetch systems    # copy the system_id into ENPHASE_SYSTEM_ID
 ## 2. Routine operations
 
 ```bash
+uv run solar-fetch meters           # one call: check whether consumption CTs report
 uv run solar-fetch daily            # refresh daily cache, print lifetime + last-30d kWh
 uv run solar-fetch intraday 14      # last 14 days of 15-min telemetry (default 7)
 uv run solar-fetch weather          # cache Open-Meteo irradiance for the daily span

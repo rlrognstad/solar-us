@@ -2,6 +2,7 @@
 
   solar-authorize                 one-time OAuth: prints URL, takes the code
   solar-fetch systems             list systems and their ids
+  solar-fetch meters              probe whether consumption CTs are reporting
   solar-fetch daily               refresh the daily cache, print a summary
   solar-fetch intraday DAYS       pull last DAYS of 15-min telemetry
   solar-fetch weather             fetch/cache Open-Meteo irradiance for the daily span
@@ -15,7 +16,7 @@ import json
 import sys
 
 from . import analyze, auth, ingest, viz, weather
-from .client import EnphaseClient
+from .client import EnphaseClient, EnphaseError
 from .config import load_settings
 
 
@@ -49,6 +50,30 @@ def _resolve_location(s, client: EnphaseClient) -> tuple[float, float]:
         "No location available. Enphase didn't return coordinates for this plan — "
         "add SOLAR_LAT and SOLAR_LON to .env (your array's latitude/longitude)."
     )
+
+
+def _probe_meters(client: EnphaseClient, sid: str) -> None:
+    """One call to consumption_lifetime tells us whether consumption CTs report.
+    Production energy is always available (estimated from the micros)."""
+    print(f"Probing metering for system {sid} ...")
+    print("  production:      YES (energy_lifetime; daily cache already works)")
+    end = dt.date.today()
+    start = end - dt.timedelta(days=3)
+    try:
+        data = client.consumption_lifetime(sid, start.isoformat(), end.isoformat())
+    except EnphaseError as e:
+        msg = str(e)
+        if " 429 " in f" {msg} ":
+            print("  consumption CTs: unknown — Enphase quota exhausted, try again after reset")
+        else:
+            print(f"  consumption CTs: NO / not configured — {msg}")
+        return
+    series = data.get("consumption") or data.get("values") or data.get("intervals") or []
+    if series:
+        print(f"  consumption CTs: YES — endpoint returned {len(series)} day(s) of usage data")
+        print("                   -> tier-2 self-consumption / TOU / carbon analyses are possible")
+    else:
+        print("  consumption CTs: none reporting (endpoint returned no usage data)")
 
 
 def _print_anomalies(s, args: list[str]) -> None:
@@ -106,6 +131,10 @@ def fetch() -> None:
         return
 
     sid = _system_id(s, client)
+
+    if cmd == "meters":
+        _probe_meters(client, sid)
+        return
 
     if cmd == "daily":
         df = ingest.daily_production(client, sid)

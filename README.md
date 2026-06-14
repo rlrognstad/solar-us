@@ -44,6 +44,7 @@ src/solar/
 
 ```bash
 solar-fetch systems          # find your system_id (put it in .env)
+solar-fetch meters           # check whether consumption CTs are reporting
 solar-fetch daily            # refresh daily cache + print a summary
 solar-fetch intraday 14      # last 14 days of 15-min telemetry
 solar-fetch weather          # cache Open-Meteo irradiance for the daily span
